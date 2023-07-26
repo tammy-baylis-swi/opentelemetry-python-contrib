@@ -26,10 +26,10 @@ classifiers = [
 ]
 dependencies = [
   "asgiref ~= 3.0",
-  "opentelemetry-api ~= 1.12",
-  "opentelemetry-instrumentation == 0.41b0.dev",
-  "opentelemetry-semantic-conventions == 0.41b0.dev",
-  "opentelemetry-util-http == 0.41b0.dev",
+  # "opentelemetry-api ~= 1.12",
+  # "opentelemetry-instrumentation == 0.41b0.dev",
+  # "opentelemetry-semantic-conventions == 0.41b0.dev",
+  # "opentelemetry-util-http == 0.41b0.dev",
 ]
 
 [project.optional-dependencies]
@@ -37,8 +37,8 @@ instruments = [
   "asgiref ~= 3.0",
 ]
 test = [
-  "opentelemetry-instrumentation-asgi[instruments]",
-  "opentelemetry-test-utils == 0.41b0.dev",
+  # "opentelemetry-instrumentation-asgi[instruments]",
+  # "opentelemetry-test-utils == 0.41b0.dev",
 ]
 
 [project.urls]

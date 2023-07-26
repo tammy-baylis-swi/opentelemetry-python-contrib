@@ -25,9 +25,9 @@ classifiers = [
   "Programming Language :: Python :: 3.11",
 ]
 dependencies = [
-  "opentelemetry-api ~= 1.12",
-  "opentelemetry-instrumentation == 0.41b0.dev",
-  "opentelemetry-semantic-conventions == 0.41b0.dev",
+  # "opentelemetry-api ~= 1.12",
+  # "opentelemetry-instrumentation == 0.41b0.dev",
+  # "opentelemetry-semantic-conventions == 0.41b0.dev",
   "packaging >= 21.0",
   "wrapt >= 1.11.2",
 ]
@@ -37,8 +37,8 @@ instruments = [
   "sqlalchemy",
 ]
 test = [
-  "opentelemetry-instrumentation-sqlalchemy[instruments]",
-  "opentelemetry-sdk ~= 1.12",
+  # "opentelemetry-instrumentation-sqlalchemy[instruments]",
+  # "opentelemetry-sdk ~= 1.12",
   "pytest",
 ]
 
