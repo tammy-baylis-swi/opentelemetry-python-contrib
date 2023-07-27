@@ -386,6 +386,8 @@ class CursorTracer:
         if not span.is_recording():
             return
         statement = self.get_statement(cursor, args)
+        statement = self.sanitize_statement(statement)
+        db_values = self.get_values(args)
         span.set_attribute(
             SpanAttributes.DB_SYSTEM, self._db_api_integration.database_system
         )
@@ -393,6 +395,8 @@ class CursorTracer:
             SpanAttributes.DB_NAME, self._db_api_integration.database
         )
         span.set_attribute(SpanAttributes.DB_STATEMENT, statement)
+        if self._db_api_integration.enhanced_db_reporting:
+            span.set_attribute(DB_VALUES, str(db_values))
 
         for (
             attribute_key,
@@ -416,6 +420,44 @@ class CursorTracer:
         if isinstance(statement, bytes):
             return statement.decode("utf8", "replace")
         return statement
+
+    def sanitize_statement(self, statement=""):
+        sql = statement.decode() if isinstance(statement, bytes) else str(statement)
+        # replace '...' "..." with ? and keep '', "" intact
+        # replace single quotes
+        sql = re.sub(r"(?!'')(?<!')'[^']+'", "?", sql)
+        # replace double quotes
+        sql = re.sub(r'(?!"")(?<!")"[^"]+"', '?', sql)
+
+        # replace number literals to 0
+        sql = re.sub(
+            r'([^a-zA-Z_0-9\.]+)'  # excludes leading field names
+            r'([1-9]\d*\.?\d*|0\.\d*|'  # decimal number
+            r'0[xX][1-9a-fA-F][0-9a-fA-F]*\.?[0-9a-fA-F]*|0[xX]0\.[0-9a-fA-F]*|'  # hex number
+            r'0[1-7][0-7]*\.?[0-7]*|00\.[0-7]*)',  # oct number
+            r"\g<1>0",
+            sql)
+        # we leave it a byte string if the query was in form of a byte string before
+        return sql.encode() if isinstance(statement, bytes) else sql
+
+    def get_values(self, args):
+        # List of args already at 1th
+        if args and len(args) > 1:
+            return args[1]
+        
+        # Else statement at 0th may have hard-coded params
+        statement = args[0]
+        # replace '...' "..." with ? and keep '', "" intact
+        # replace single quotes
+        statement = re.sub(r"(?!'')(?<!')'[^']+'", "?", statement)
+        # replace double quotes
+        statement = re.sub(r'(?!"")(?<!")"[^"]+"', '?', statement)
+        # Find all values matches
+        return re.findall(
+            r'([1-9]\d*\.?\d*|0\.\d*|'  # decimal number
+            r'0[xX][1-9a-fA-F][0-9a-fA-F]*\.?[0-9a-fA-F]*|0[xX]0\.[0-9a-fA-F]*|'  # hex number
+            r'0[1-7][0-7]*\.?[0-7]*|00\.[0-7]*)',  # oct number
+            statement)
 
     def traced_execution(
         self,
