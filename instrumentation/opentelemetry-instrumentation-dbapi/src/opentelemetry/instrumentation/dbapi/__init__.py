@@ -67,6 +67,7 @@ def trace_integration(
     capture_parameters: bool = False,
     enable_commenter: bool = False,
     db_api_integration_factory=None,
+    enhanced_db_reporting: bool = False,
 ):
     """Integrate with DB API library.
     https://www.python.org/dev/peps/pep-0249/
@@ -84,6 +85,7 @@ def trace_integration(
         enable_commenter: Flag to enable/disable sqlcommenter.
         db_api_integration_factory: The `DatabaseApiIntegration` to use. If none is passed the
             default one is used.
+        enhanced_db_reporting: Flag to enabled/disable adding a span attribute containing query's parameters
     """
     wrap_connect(
         __name__,
@@ -96,6 +98,7 @@ def trace_integration(
         capture_parameters=capture_parameters,
         enable_commenter=enable_commenter,
         db_api_integration_factory=db_api_integration_factory,
+        enhanced_db_reporting=enhanced_db_reporting,
     )
 
 
@@ -111,6 +114,7 @@ def wrap_connect(
     enable_commenter: bool = False,
     db_api_integration_factory=None,
     commenter_options: dict = None,
+    enhanced_db_reporting: bool = False,
 ):
     """Integrate with DB API library.
     https://www.python.org/dev/peps/pep-0249/
@@ -129,6 +133,7 @@ def wrap_connect(
         db_api_integration_factory: The `DatabaseApiIntegration` to use. If none is passed the
             default one is used.
         commenter_options: Configurations for tags to be appended at the sql query.
+        enhanced_db_reporting: Flag to enabled/disable adding a span attribute containing query's parameters
 
     """
     db_api_integration_factory = (
@@ -152,6 +157,7 @@ def wrap_connect(
             enable_commenter=enable_commenter,
             commenter_options=commenter_options,
             connect_module=connect_module,
+            enhanced_db_reporting=enhanced_db_reporting,
         )
         return db_integration.wrapped_connection(wrapped, args, kwargs)
 
@@ -186,6 +192,7 @@ def instrument_connection(
     capture_parameters: bool = False,
     enable_commenter: bool = False,
     commenter_options: dict = None,
+    enhanced_db_reporting: bool = False,
 ):
     """Enable instrumentation in a database connection.
 
@@ -200,6 +207,7 @@ def instrument_connection(
         capture_parameters: Configure if db.statement.parameters should be captured.
         enable_commenter: Flag to enable/disable sqlcommenter.
         commenter_options: Configurations for tags to be appended at the sql query.
+        enhanced_db_reporting: Flag to enabled/disable adding a span attribute containing query's parameters
 
     Returns:
         An instrumented connection.
@@ -217,6 +225,7 @@ def instrument_connection(
         capture_parameters=capture_parameters,
         enable_commenter=enable_commenter,
         commenter_options=commenter_options,
+        enhanced_db_reporting=enhanced_db_reporting,
     )
     db_integration.get_connection_attributes(connection)
     return get_traced_connection_proxy(connection, db_integration)
@@ -250,6 +259,7 @@ class DatabaseApiIntegration:
         enable_commenter: bool = False,
         commenter_options: dict = None,
         connect_module: typing.Callable[..., typing.Any] = None,
+        enhanced_db_reporting: bool = False,
     ):
         self.connection_attributes = connection_attributes
         if self.connection_attributes is None:
@@ -275,6 +285,7 @@ class DatabaseApiIntegration:
         self.name = ""
         self.database = ""
         self.connect_module = connect_module
+        self.enhanced_db_reporting = enhanced_db_reporting
 
     def wrapped_connection(
         self,
@@ -364,6 +375,7 @@ class CursorTracer:
         )
         self._connect_module = self._db_api_integration.connect_module
         self._leading_comment_remover = re.compile(r"^/\*.*?\*/")
+        self._enhanced_db_reporting = self._db_api_integration.enhanced_db_reporting
 
     def _populate_span(
         self,
