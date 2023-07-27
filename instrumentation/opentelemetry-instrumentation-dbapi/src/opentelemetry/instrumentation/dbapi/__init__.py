@@ -434,7 +434,8 @@ class CursorTracer:
             r'([^a-zA-Z_0-9\.]+)'  # excludes leading field names
             r'([1-9]\d*\.?\d*|0\.\d*|'  # decimal number
             r'0[xX][1-9a-fA-F][0-9a-fA-F]*\.?[0-9a-fA-F]*|0[xX]0\.[0-9a-fA-F]*|'  # hex number
-            r'0[1-7][0-7]*\.?[0-7]*|00\.[0-7]*)',  # oct number
+            r'0[1-7][0-7]*\.?[0-7]*|00\.[0-7]*|'  # oct number
+            r'\%s)',  # %s
             r"\g<1>0",
             sql)
         # we leave it a byte string if the query was in form of a byte string before
