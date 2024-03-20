@@ -16,6 +16,7 @@ import os
 import threading
 from enum import Enum
 
+from opentelemetry.semconv.resource import ResourceAttributes
 from opentelemetry.semconv.trace import SpanAttributes
 
 # TODO: will come through semconv package once updated
@@ -144,11 +145,38 @@ def _set_http_network_protocol_version(result, version, sem_conv_opt_in_mode):
         )
 
 
+def _set_cloud_resource_id(span, cr_id, sem_conv_opt_in_mode):
+    if _report_old_faas(sem_conv_opt_in_mode):
+        span.set_attribute(
+            ResourceAttributes.FAAS_ID,
+            cr_id,
+        )
+    if _report_new_faas(sem_conv_opt_in_mode):
+        span.set_attribute(
+            ResourceAttributes.CLOUD_RESOURCE_ID,
+            cr_id,
+        )
+
+
+def _set_faas_invocation_id(span, fi_id, sem_conv_opt_in_mode):
+    if _report_old_faas(sem_conv_opt_in_mode):
+        span.set_attribute(
+            SpanAttributes.FAAS_EXECUTION,
+            fi_id,
+        )
+    if _report_new_faas(sem_conv_opt_in_mode):
+        span.set_attribute(
+            SpanAttributes.FAAS_INVOCATION_ID,
+            fi_id,
+        )
+
+
 _OTEL_SEMCONV_STABILITY_OPT_IN_KEY = "OTEL_SEMCONV_STABILITY_OPT_IN"
 
 
 class _OpenTelemetryStabilitySignalType:
     HTTP = "http"
+    FAAS = "faas"
 
 
 class _OpenTelemetryStabilityMode(Enum):
@@ -156,7 +184,13 @@ class _OpenTelemetryStabilityMode(Enum):
     HTTP = "http"
     # http/dup - emit both the old and the stable HTTP and networking conventions
     HTTP_DUP = "http/dup"
-    # default - continue emitting old experimental HTTP and networking conventions
+
+    # faas - emit the new, stable FAAS aconventions ONLY
+    FAAS = "faas"
+    # faas/dup - emit both the old and the stable FAAS conventions
+    FAAS_DUP = "faas/dup"
+
+    # default - continue emitting all old experimental conventions
     DEFAULT = "default"
 
 
@@ -166,6 +200,14 @@ def _report_new(mode):
 
 def _report_old(mode):
     return mode.name != _OpenTelemetryStabilityMode.HTTP.name
+
+
+def _report_new_faas(mode):
+    return mode.name != _OpenTelemetryStabilityMode.DEFAULT.name
+
+
+def _report_old_faas(mode):
+    return mode.name != _OpenTelemetryStabilityMode.FAAS.name
 
 
 class _OpenTelemetrySemanticConventionStability:
@@ -178,12 +220,13 @@ class _OpenTelemetrySemanticConventionStability:
         with _OpenTelemetrySemanticConventionStability._lock:
             if not _OpenTelemetrySemanticConventionStability._initialized:
                 # Users can pass in comma delimited string for opt-in options
-                # Only values for http stability are supported for now
+                # Only values for http, faas stability are supported for now
                 opt_in = os.environ.get(_OTEL_SEMCONV_STABILITY_OPT_IN_KEY, "")
                 opt_in_list = []
                 if opt_in:
                     opt_in_list = [s.strip() for s in opt_in.split(",")]
                 http_opt_in = _OpenTelemetryStabilityMode.DEFAULT
+                faas_opt_in = _OpenTelemetryStabilityMode.DEFAULT
                 if opt_in_list:
                     # Process http opt-in
                     # http/dup takes priority over http
@@ -194,9 +237,23 @@ class _OpenTelemetrySemanticConventionStability:
                         http_opt_in = _OpenTelemetryStabilityMode.HTTP_DUP
                     elif _OpenTelemetryStabilityMode.HTTP.value in opt_in_list:
                         http_opt_in = _OpenTelemetryStabilityMode.HTTP
+
+                    # Process faas opt-in
+                    # faas/dup takes priority over faas
+                    if (
+                        _OpenTelemetryStabilityMode.FAAS_DUP.value
+                        in opt_in_list
+                    ):
+                        faas_opt_in = _OpenTelemetryStabilityMode.FAAS_DUP
+                    elif _OpenTelemetryStabilityMode.FAAS.value in opt_in_list:
+                        faas_opt_in = _OpenTelemetryStabilityMode.FAAS
+
                 _OpenTelemetrySemanticConventionStability._OTEL_SEMCONV_STABILITY_SIGNAL_MAPPING[
                     _OpenTelemetryStabilitySignalType.HTTP
                 ] = http_opt_in
+                _OpenTelemetrySemanticConventionStability._OTEL_SEMCONV_STABILITY_SIGNAL_MAPPING[
+                    _OpenTelemetryStabilitySignalType.FAAS
+                ] = faas_opt_in
                 _OpenTelemetrySemanticConventionStability._initialized = True
 
     @classmethod
