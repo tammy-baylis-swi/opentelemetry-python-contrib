@@ -87,6 +87,7 @@ from opentelemetry.propagators.aws.aws_xray_propagator import (
     TRACE_HEADER_KEY,
     AwsXRayPropagator,
 )
+from opentelemetry.semconv.resource import ResourceAttributes
 from opentelemetry.semconv.trace import SpanAttributes
 from opentelemetry.trace import (
     Span,
@@ -358,11 +359,8 @@ def _instrument(
                 # See more:
                 # https://github.com/open-telemetry/semantic-conventions/blob/main/docs/faas/aws-lambda.md#all-triggers
                 account_id = lambda_context.invoked_function_arn.split(":")[4]
-
-                # TODO: Update key with semconvgen 1.23.0
-                # https://github.com/open-telemetry/semantic-conventions/issues/551
                 span.set_attribute(
-                    "cloud.account.id",
+                    ResourceAttributes.CLOUD_ACCOUNT_ID,
                     account_id,
                 )
 
