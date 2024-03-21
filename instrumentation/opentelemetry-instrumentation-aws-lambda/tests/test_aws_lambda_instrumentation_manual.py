@@ -25,10 +25,6 @@ from tests.mocks.api_gateway_proxy_event import (
 )
 
 from opentelemetry.environment_variables import OTEL_PROPAGATORS
-from opentelemetry.instrumentation._semconv import (
-    _OTEL_SEMCONV_STABILITY_OPT_IN_KEY,
-    _OpenTelemetrySemanticConventionStability,
-)
 from opentelemetry.instrumentation.aws_lambda import (
     _HANDLER,
     _X_AMZN_TRACE_ID,
@@ -41,7 +37,6 @@ from opentelemetry.propagators.aws.aws_xray_propagator import (
     TRACE_ID_FIRST_PART_LENGTH,
     TRACE_ID_VERSION,
 )
-from opentelemetry.semconv.resource import ResourceAttributes
 from opentelemetry.semconv.trace import SpanAttributes
 from opentelemetry.test.test_base import TestBase
 from opentelemetry.trace import NoOpTracerProvider, SpanKind, StatusCode
@@ -58,7 +53,7 @@ class MockLambdaContext:
 
 MOCK_LAMBDA_CONTEXT = MockLambdaContext(
     aws_request_id="mock_aws_request_id",
-    invoked_function_arn="arn://mock-lambda-function-arn",
+    invoked_function_arn="arn:aws:lambda:us-east-1:123456:function:myfunction:myalias",
 )
 
 MOCK_XRAY_TRACE_ID = 0x5FB7331105E8BB83207FA31D4D9CDB4C
@@ -111,7 +106,6 @@ class TestAwsLambdaInstrumentor(TestBase):
             "os.environ",
             {_HANDLER: "tests.mocks.lambda_function.handler"},
         )
-        _OpenTelemetrySemanticConventionStability._initialized = False
         self.common_env_patch.start()
 
         # NOTE: Whether AwsLambdaInstrumentor().instrument() is run is decided
@@ -150,8 +144,9 @@ class TestAwsLambdaInstrumentor(TestBase):
         self.assertSpanHasAttributes(
             span,
             {
-                ResourceAttributes.FAAS_ID: MOCK_LAMBDA_CONTEXT.invoked_function_arn,
-                SpanAttributes.FAAS_EXECUTION: MOCK_LAMBDA_CONTEXT.aws_request_id,
+                SpanAttributes.CLOUD_RESOURCE_ID: MOCK_LAMBDA_CONTEXT.invoked_function_arn,
+                SpanAttributes.FAAS_INVOCATION_ID: MOCK_LAMBDA_CONTEXT.aws_request_id,
+                "cloud.account.id": MOCK_LAMBDA_CONTEXT.invoked_function_arn.split(":")[4],
             },
         )
 
@@ -161,74 +156,6 @@ class TestAwsLambdaInstrumentor(TestBase):
         )
         self.assertEqual(parent_context.span_id, MOCK_XRAY_PARENT_SPAN_ID)
         self.assertTrue(parent_context.is_remote)
-
-        test_env_patch.stop()
-
-    def test_active_tracing_semconv_opt_in(self):
-        test_env_patch = mock.patch.dict(
-            "os.environ",
-            {
-                **os.environ,
-                # Using Active tracing
-                _X_AMZN_TRACE_ID: MOCK_XRAY_TRACE_CONTEXT_SAMPLED,
-                # Opt into new semconv
-                _OTEL_SEMCONV_STABILITY_OPT_IN_KEY: "faas",
-            },
-        )
-        test_env_patch.start()
-
-        AwsLambdaInstrumentor().instrument()
-
-        mock_execute_lambda()
-
-        spans = self.memory_exporter.get_finished_spans()
-
-        assert spans
-
-        self.assertEqual(len(spans), 1)
-        span = spans[0]
-        self.assertSpanHasAttributes(
-            span,
-            {
-                ResourceAttributes.CLOUD_RESOURCE_ID: MOCK_LAMBDA_CONTEXT.invoked_function_arn,
-                SpanAttributes.FAAS_INVOCATION_ID: MOCK_LAMBDA_CONTEXT.aws_request_id,
-            },
-        )
-
-        test_env_patch.stop()
-
-    def test_active_tracing_semconv_opt_in_dup(self):
-        test_env_patch = mock.patch.dict(
-            "os.environ",
-            {
-                **os.environ,
-                # Using Active tracing
-                _X_AMZN_TRACE_ID: MOCK_XRAY_TRACE_CONTEXT_SAMPLED,
-                # Opt into new semconv
-                _OTEL_SEMCONV_STABILITY_OPT_IN_KEY: "faas/dup",
-            },
-        )
-        test_env_patch.start()
-
-        AwsLambdaInstrumentor().instrument()
-
-        mock_execute_lambda()
-
-        spans = self.memory_exporter.get_finished_spans()
-
-        assert spans
-
-        self.assertEqual(len(spans), 1)
-        span = spans[0]
-        self.assertSpanHasAttributes(
-            span,
-            {
-                ResourceAttributes.FAAS_ID: MOCK_LAMBDA_CONTEXT.invoked_function_arn,
-                ResourceAttributes.CLOUD_RESOURCE_ID: MOCK_LAMBDA_CONTEXT.invoked_function_arn,
-                SpanAttributes.FAAS_EXECUTION: MOCK_LAMBDA_CONTEXT.aws_request_id,
-                SpanAttributes.FAAS_INVOCATION_ID: MOCK_LAMBDA_CONTEXT.aws_request_id,
-            },
-        )
 
         test_env_patch.stop()
 

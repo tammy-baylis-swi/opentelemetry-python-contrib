@@ -77,14 +77,6 @@ from urllib.parse import urlencode
 from wrapt import wrap_function_wrapper
 
 from opentelemetry.context.context import Context
-from opentelemetry.instrumentation._semconv import (
-    _get_schema_url,
-    _OpenTelemetrySemanticConventionStability,
-    _OpenTelemetryStabilityMode,
-    _OpenTelemetryStabilitySignalType,
-    _set_cloud_resource_id,
-    _set_faas_invocation_id,
-)
 from opentelemetry.instrumentation.aws_lambda.package import _instruments
 from opentelemetry.instrumentation.aws_lambda.version import __version__
 from opentelemetry.instrumentation.instrumentor import BaseInstrumentor
@@ -295,15 +287,12 @@ def _instrument(
     tracer_provider: TracerProvider = None,
     disable_aws_context_propagation: bool = False,
     meter_provider: MeterProvider = None,
-    sem_conv_opt_in_mode: _OpenTelemetryStabilityMode = _OpenTelemetryStabilityMode.DEFAULT,
 ):
     # pylint: disable=too-many-locals
     # pylint: disable=too-many-statements
     def _instrumented_lambda_handler_call(  # noqa pylint: disable=too-many-branches
         call_wrapped, instance, args, kwargs
     ):
-        schema_url = _get_schema_url(sem_conv_opt_in_mode)
-
         orig_handler_name = ".".join(
             [wrapped_module_name, wrapped_function_name]
         )
@@ -339,7 +328,7 @@ def _instrument(
             __name__,
             __version__,
             tracer_provider,
-            schema_url=schema_url,
+            schema_url="https://opentelemetry.io/schemas/1.11.0",
         )
 
         with tracer.start_as_current_span(
@@ -350,20 +339,31 @@ def _instrument(
             if span.is_recording():
                 lambda_context = args[1]
                 # NOTE: The specs mention an exception here, allowing the
-                # `ResourceAttributes.CLOUD_RESOURCE_ID` attribute to be set as a span
+                # `SpanAttributes.CLOUD_RESOURCE_ID` attribute to be set as a span
                 # attribute instead of a resource attribute.
                 #
                 # See more:
                 # https://github.com/open-telemetry/semantic-conventions/blob/main/docs/faas/aws-lambda.md#resource-detector
-                _set_cloud_resource_id(
-                    span,
+                span.set_attribute(
+                    SpanAttributes.CLOUD_RESOURCE_ID,
                     lambda_context.invoked_function_arn,
-                    sem_conv_opt_in_mode,
                 )
-                _set_faas_invocation_id(
-                    span,
+                span.set_attribute(
+                    SpanAttributes.FAAS_INVOCATION_ID,
                     lambda_context.aws_request_id,
-                    sem_conv_opt_in_mode,
+                )
+
+                # NOTE: `cloud.account.id` can be parsed from the ARN as the fifth item when splitting on `:`
+                #
+                # See more:
+                # https://github.com/open-telemetry/semantic-conventions/blob/main/docs/faas/aws-lambda.md#all-triggers
+                account_id = lambda_context.invoked_function_arn.split(":")[4]
+
+                # TODO: Update key with semconvgen 1.23.0
+                # https://github.com/open-telemetry/semantic-conventions/issues/551
+                span.set_attribute(
+                    "cloud.account.id",
+                    account_id,
                 )
 
             exception = None
@@ -454,9 +454,6 @@ class AwsLambdaInstrumentor(BaseInstrumentor):
                     will try to read the context from the `_X_AMZN_TRACE_ID` environment
                     variable set by Lambda, set this to `True` to disable this behavior.
         """
-        semconv_opt_in_mode = _OpenTelemetrySemanticConventionStability._get_opentelemetry_stability_opt_in_mode(
-            _OpenTelemetryStabilitySignalType.FAAS,
-        )
         lambda_handler = os.environ.get(ORIG_HANDLER, os.environ.get(_HANDLER))
         # pylint: disable=attribute-defined-outside-init
         (
@@ -497,7 +494,6 @@ class AwsLambdaInstrumentor(BaseInstrumentor):
             tracer_provider=kwargs.get("tracer_provider"),
             disable_aws_context_propagation=disable_aws_context_propagation,
             meter_provider=kwargs.get("meter_provider"),
-            sem_conv_opt_in_mode=semconv_opt_in_mode,
         )
 
     def _uninstrument(self, **kwargs):
