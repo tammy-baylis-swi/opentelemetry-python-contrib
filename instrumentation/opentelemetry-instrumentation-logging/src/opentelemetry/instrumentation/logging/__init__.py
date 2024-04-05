@@ -95,8 +95,6 @@ class LoggingInstrumentor(BaseInstrumentor):  # pylint: disable=empty-docstring
             record.otelSpanID = "0"
             record.otelTraceID = "0"
             record.otelTraceSampled = False
-            record.awsRequestId = getattr(record, "aws_request_id", None)
-            record.requestId = getattr(record, "requestId", None)
 
             nonlocal service_name
             if service_name is None:
