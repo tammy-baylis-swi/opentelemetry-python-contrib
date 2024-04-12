@@ -144,21 +144,7 @@ class LoggingInstrumentor(BaseInstrumentor):  # pylint: disable=empty-docstring
             )
             log_level = log_level or logging.INFO
 
-            log_handlers = kwargs.get(
-                "log_handlers", []
-            )
-            for handler in log_handlers:
-                if not isinstance(handler, logging.Handler):
-                    # TODO warn in stderr
-                    log_handlers.remove(handler)
-
-            config_kwargs = {
-                "format": log_format,
-                "level": log_level,
-            }
-            if log_handlers:
-                config_kwargs["handlers"] = log_handlers
-            logging.basicConfig(**config_kwargs)
+            logging.basicConfig(format=log_format, level=log_level)
 
     def _uninstrument(self, **kwargs):
         if LoggingInstrumentor._old_factory:
