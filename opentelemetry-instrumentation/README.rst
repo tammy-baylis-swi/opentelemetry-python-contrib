@@ -9,7 +9,7 @@ OpenTelemetry Instrumentation
 About this
 ------------
 
-This is a fork of `opentelemetry-instrumentation` that excludes `opentelemetry-instrumentation-aiohttp-server` to patch bootstrapping.
+This is a fork of ``opentelemetry-instrumentation`` that excludes ``opentelemetry-instrumentation-aiohttp-server`` to patch bootstrapping.
 
 
 Installation
@@ -17,7 +17,7 @@ Installation
 
 ::
 
-    pip install opentelemetry-instrumentation
+    pip install sw-apm-opentelemetry-instrumentation
 
 
 This package provides commands that help automatically instrument a program:
