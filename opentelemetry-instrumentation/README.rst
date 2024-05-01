@@ -6,6 +6,12 @@ OpenTelemetry Instrumentation
 .. |pypi| image:: https://badge.fury.io/py/opentelemetry-instrumentation.svg
    :target: https://pypi.org/project/opentelemetry-instrumentation/
 
+About this
+------------
+
+This is a fork of `opentelemetry-instrumentation` that excludes `opentelemetry-instrumentation-aiohttp-server` to patch bootstrapping.
+
+
 Installation
 ------------
 

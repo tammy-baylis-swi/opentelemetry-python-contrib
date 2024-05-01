@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "opentelemetry-instrumentation"
+name = "sw-apm-opentelemetry-instrumentation"
 dynamic = ["version"]
-description = "Instrumentation Tools & Auto Instrumentation for OpenTelemetry Python"
+description = "Fork of Instrumentation Tools & Auto Instrumentation for OpenTelemetry Python"
 readme = "README.rst"
 license = "Apache-2.0"
 requires-python = ">=3.8"
