@@ -6,12 +6,19 @@ OpenTelemetry logging integration
 .. |pypi| image:: https://badge.fury.io/py/opentelemetry-instrumentation-logging.svg
    :target: https://pypi.org/project/opentelemetry-instrumentation-logging/
 
+
+About this
+------------
+
+This is a fork of ``opentelemetry-instrumentation-logging`` that uses custom ``sw-apm-opentelemetry-instrumentation``.
+
+
 Installation
 ------------
 
 ::
 
-    pip install opentelemetry-instrumentation-logging
+    pip install sw-apm-opentelemetry-instrumentation-logging
 
 
 References
