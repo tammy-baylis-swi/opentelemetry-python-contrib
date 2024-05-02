@@ -6,12 +6,18 @@ OpenTelemetry Database API instrumentation
 .. |pypi| image:: https://badge.fury.io/py/opentelemetry-instrumentation-dbapi.svg
    :target: https://pypi.org/project/opentelemetry-instrumentation-dbapi/
 
+About this
+------------
+
+This is a fork of ``opentelemetry-instrumentation-dbapi`` that uses custom ``sw-apm-opentelemetry-instrumentation``.
+
+
 Installation
 ------------
 
 ::
 
-    pip install opentelemetry-instrumentation-dbapi
+    pip install sw-apm-opentelemetry-instrumentation-dbapi
 
 
 References

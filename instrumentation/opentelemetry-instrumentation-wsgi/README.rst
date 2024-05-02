@@ -10,12 +10,19 @@ OpenTelemetry WSGI Middleware
 This library provides a WSGI middleware that can be used on any WSGI framework
 (such as Django / Flask) to track requests timing through OpenTelemetry.
 
+
+About this
+------------
+
+This is a fork of ``opentelemetry-instrumentation-wsgi`` that uses custom ``sw-apm-opentelemetry-instrumentation``.
+
+
 Installation
 ------------
 
 ::
 
-    pip install opentelemetry-instrumentation-wsgi
+    pip install sw-apm-opentelemetry-instrumentation-wsgi
 
 References
 ----------

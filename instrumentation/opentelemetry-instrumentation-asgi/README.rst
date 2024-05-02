@@ -10,12 +10,18 @@ OpenTelemetry ASGI Instrumentation
 This library provides a ASGI middleware that can be used on any ASGI framework
 (such as Django, Starlette, FastAPI or Quart) to track requests timing through OpenTelemetry.
 
+About this
+------------
+
+This is a fork of ``opentelemetry-instrumentation-asgi`` that uses custom ``sw-apm-opentelemetry-instrumentation``.
+
+
 Installation
 ------------
 
 ::
 
-    pip install opentelemetry-instrumentation-asgi
+    pip install sw-apm-opentelemetry-instrumentation-asgi
 
 References
 ----------
