@@ -62,6 +62,8 @@ def main():
         # FIXME: Remove this logic once these packages are available in Pypi
         if pkg["name"] == "opentelemetry-instrumentation-aiohttp-server":
             continue
+        if pkg["name"] == "opentelemetry-instrumentation-threading":
+            continue
 
         if not pkg["instruments"]:
             default_instrumentations.elts.append(ast.Str(pkg["requirement"]))
