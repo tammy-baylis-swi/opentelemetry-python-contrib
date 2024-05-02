@@ -5,7 +5,7 @@ SHELL=bash
 nothing:
 	@echo -e "Welcome! Options:"
 	@echo -e "  - 'make package':"
-	@echo -e "          Build the agent package distribution (sdist and bdist)."
+	@echo -e "          Build sw-apm-opentelemetry-instrumentation (sdist and bdist)."
 
 package:
 	@rm -rf ./dist
