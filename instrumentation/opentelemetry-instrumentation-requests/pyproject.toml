@@ -44,6 +44,9 @@ Homepage = "https://github.com/open-telemetry/opentelemetry-python-contrib/tree/
 [tool.hatch.version]
 path = "src/opentelemetry/instrumentation/requests/version.py"
 
+[tool.hatch.metadata]
+allow-direct-references = true
+
 [tool.hatch.build.targets.sdist]
 include = [
   "/src",
