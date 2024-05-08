@@ -119,10 +119,6 @@ class _OpenTelemetrySemanticConventionStability:
                 # Users can pass in comma delimited string for opt-in options
                 # Only values for http stability are supported for now
                 opt_in = os.environ.get(OTEL_SEMCONV_STABILITY_OPT_IN, "")
-
-                print("!!! SemconvStability._initialize")
-                print("Got opt_in from env var: %s", opt_in)
-
                 opt_in_list = []
                 if opt_in:
                     opt_in_list = [s.strip() for s in opt_in.split(",")]
@@ -134,9 +130,6 @@ class _OpenTelemetrySemanticConventionStability:
                         http_opt_in = _HTTPStabilityMode.HTTP_DUP
                     elif _HTTPStabilityMode.HTTP.value in opt_in_list:
                         http_opt_in = _HTTPStabilityMode.HTTP
-                
-                print("Using http_opt_in %s", http_opt_in)
-
                 _OpenTelemetrySemanticConventionStability._OTEL_SEMCONV_STABILITY_SIGNAL_MAPPING[
                     _OpenTelemetryStabilitySignalType.HTTP
                 ] = http_opt_in
@@ -148,16 +141,6 @@ class _OpenTelemetrySemanticConventionStability:
         cls,
         signal_type: _OpenTelemetryStabilitySignalType,
     ) -> _HTTPStabilityMode:
-        print("!!! _semconv.get_otel_stability")
-        print("signal_type: %s", signal_type)
-        print("_OTEL_SEMCONV_STABILITY_SIGNAL_MAPPING: %s", _OpenTelemetrySemanticConventionStability._OTEL_SEMCONV_STABILITY_SIGNAL_MAPPING)
-        print(
-            "retval: %s",
-            _OpenTelemetrySemanticConventionStability._OTEL_SEMCONV_STABILITY_SIGNAL_MAPPING.get(
-                signal_type, _HTTPStabilityMode.DEFAULT
-            )
-        )
-
         return _OpenTelemetrySemanticConventionStability._OTEL_SEMCONV_STABILITY_SIGNAL_MAPPING.get(
             signal_type, _HTTPStabilityMode.DEFAULT
         )
@@ -241,14 +224,10 @@ def _set_http_status_code(result, code, sem_conv_opt_in_mode):
 
 
 def _set_http_url(result, url, sem_conv_opt_in_mode):
-    print("!!! _semconv._set_http_url got opt_in_mode: %s", sem_conv_opt_in_mode)
-
     if _report_old(sem_conv_opt_in_mode):
         set_string_attribute(result, SpanAttributes.HTTP_URL, url)
-        print("set_string_attr with key %s, url %s", SpanAttributes.HTTP_URL, url)
     if _report_new(sem_conv_opt_in_mode):
         set_string_attribute(result, SpanAttributes.URL_FULL, url)
-        print("set_string_attr with key %s, url %s", SpanAttributes.URL_FULL, url)
 
 
 def _set_http_scheme(result, scheme, sem_conv_opt_in_mode):

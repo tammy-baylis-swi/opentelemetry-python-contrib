@@ -125,9 +125,6 @@ def _instrument(
     :code:`requests.session.Session.request` (this includes
     :code:`requests.get`, etc.)."""
 
-    print("!!! init.py _instrument with opt_in_mode:")
-    print("%s", sem_conv_opt_in_mode)
-
     # Since
     # https://github.com/psf/requests/commit/d72d1162142d1bf8b1b5711c664fbbd674f349d1
     # (v0.7.0, Oct 23, 2011), get, post, etc are implemented via request which
@@ -211,9 +208,6 @@ def _instrument(
                     )
         except ValueError:
             pass
-
-        print("!!! RequestsInstrumentor start_as_current_span with span_attributes:")
-        print("%s", span_attributes)
 
         with tracer.start_as_current_span(
             span_name, kind=SpanKind.CLIENT, attributes=span_attributes
@@ -318,8 +312,6 @@ def _instrument(
             if exception is not None:
                 raise exception.with_traceback(exception.__traceback__)
 
-            print("Attributes updated: %s", span_attributes)
-
         return result
 
     instrumented_send.opentelemetry_instrumentation_requests_applied = True
@@ -384,16 +376,9 @@ class RequestsInstrumentor(BaseInstrumentor):
                 ``excluded_urls``: A string containing a comma-delimited
                     list of regexes used to exclude URLs from tracking
         """
-        print("!!! RequestsInstrumentor _instrument with kwargs:")
-        print("%s", kwargs)
-
         semconv_opt_in_mode = _OpenTelemetrySemanticConventionStability._get_opentelemetry_stability_opt_in_mode(
             _OpenTelemetryStabilitySignalType.HTTP,
         )
-
-        print("Then got semconv_opt_in_mode (no hyphen):")
-        print("%s", semconv_opt_in_mode)
-
         schema_url = _get_schema_url(semconv_opt_in_mode)
         tracer_provider = kwargs.get("tracer_provider")
         tracer = get_tracer(
