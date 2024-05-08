@@ -25,10 +25,10 @@ classifiers = [
 ]
 dependencies = [
   "opentelemetry-api ~= 1.12",
-  "opentelemetry-instrumentation == 0.46b0.dev",
-  "opentelemetry-instrumentation-wsgi == 0.46b0.dev",
-  "opentelemetry-semantic-conventions == 0.46b0.dev",
-  "opentelemetry-util-http == 0.46b0.dev",
+  "opentelemetry-instrumentation@git+https://github.com/tammy-baylis-swi/opentelemetry-python-contrib.git@sw-upgrade-otel#subdirectory=opentelemetry-instrumentation",
+  "opentelemetry-instrumentation-wsgi@git+https://github.com/tammy-baylis-swi/opentelemetry-python-contrib.git@sw-upgrade-otel#subdirectory=instrumentation/opentelemetry-instrumentation-wsgi",
+  "opentelemetry-semantic-conventions@git+https://github.com/tammy-baylis-swi/opentelemetry-python.git@sw-upgrade-otel#subdirectory=opentelemetry-semantic-conventions",
+  "opentelemetry-util-http@git+https://github.com/tammy-baylis-swi/opentelemetry-python-contrib.git@sw-upgrade-otel#subdirectory=util/opentelemetry-util-http",
   "packaging >= 21.0",
   "importlib-metadata >= 4.0",
 ]
@@ -46,6 +46,9 @@ Homepage = "https://github.com/open-telemetry/opentelemetry-python-contrib/tree/
 
 [tool.hatch.version]
 path = "src/opentelemetry/instrumentation/flask/version.py"
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.hatch.build.targets.sdist]
 include = [
