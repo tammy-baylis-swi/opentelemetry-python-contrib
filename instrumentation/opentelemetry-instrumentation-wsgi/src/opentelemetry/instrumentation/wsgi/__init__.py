@@ -311,6 +311,8 @@ def collect_request_attributes(
     """Collects HTTP request attributes from the PEP3333-conforming
     WSGI environ and returns a dictionary to be used as span creation attributes.
     """
+    print("!!! wsgi.collect_request_attrs with %s", sem_conv_opt_in_mode)
+
     result = {}
     _set_http_method(
         result,
@@ -380,6 +382,7 @@ def collect_request_attributes(
     if flavor:
         _set_http_flavor_version(result, flavor, sem_conv_opt_in_mode)
 
+    print("!!! wsgi.collect_request_attrs result: %s", result)
     return result
 
 
@@ -543,11 +546,16 @@ class OpenTelemetryMiddleware:
         tracer_provider=None,
         meter_provider=None,
     ):
+        print("!!! Middleware init (wsgi)")
+
         # initialize semantic conventions opt-in if needed
         _OpenTelemetrySemanticConventionStability._initialize()
         sem_conv_opt_in_mode = _OpenTelemetrySemanticConventionStability._get_opentelemetry_stability_opt_in_mode(
             _OpenTelemetryStabilitySignalType.HTTP,
         )
+
+        print("with sem_conv_opt_in_mode: %s", sem_conv_opt_in_mode)
+
         self.wsgi = wsgi
         self.tracer = trace.get_tracer(
             __name__,
@@ -623,6 +631,8 @@ class OpenTelemetryMiddleware:
             environ: A WSGI environment.
             start_response: The WSGI start_response callable.
         """
+        print("!!! __call__ with self.mode %s", self._sem_conv_opt_in_mode)
+
         req_attrs = collect_request_attributes(
             environ, self._sem_conv_opt_in_mode
         )
@@ -630,6 +640,8 @@ class OpenTelemetryMiddleware:
             req_attrs,
             self._sem_conv_opt_in_mode,
         )
+
+        print("req_attrs: %s", req_attrs)
 
         span, token = _start_internal_or_server_span(
             tracer=self.tracer,

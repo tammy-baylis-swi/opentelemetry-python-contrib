@@ -96,6 +96,9 @@ class BaseInstrumentor(ABC):
         ``opentelemetry-instrument`` command does.
         """
 
+        print("!!! Starting BaseInstrumentor.instrument with kwargs:")
+        print("%s", kwargs)
+
         if self._is_instrumented_by_opentelemetry:
             _LOG.warning("Attempting to instrument while already instrumented")
             return None
@@ -111,6 +114,8 @@ class BaseInstrumentor(ABC):
         # initialize semantic conventions opt-in if needed
         _OpenTelemetrySemanticConventionStability._initialize()
 
+        print("Base instrumentor calling self._instrument with kwargs:")
+        print("%s", kwargs)
         result = self._instrument(  # pylint: disable=assignment-from-no-return
             **kwargs
         )
