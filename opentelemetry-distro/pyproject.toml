@@ -25,11 +25,11 @@ classifiers = [
   "Programming Language :: Python :: 3.12",
   "Typing :: Typed",
 ]
-dependencies = [
-  "opentelemetry-api ~= 1.12",
-  "opentelemetry-instrumentation == 0.48b0.dev",
-  "opentelemetry-sdk ~= 1.13",
-]
+# dependencies = [
+#   "opentelemetry-api ~= 1.12",
+#   "opentelemetry-instrumentation == 0.48b0.dev",
+#   "opentelemetry-sdk ~= 1.13",
+# ]
 
 [project.optional-dependencies]
 otlp = [

@@ -24,10 +24,10 @@ classifiers = [
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
 ]
-dependencies = [
-  "opentelemetry-sdk ~= 1.21",
-  "opentelemetry-instrumentation ~= 0.43b0",
-]
+# dependencies = [
+#   "opentelemetry-sdk ~= 1.21",
+#   "opentelemetry-instrumentation ~= 0.43b0",
+# ]
 
 [project.entry-points.opentelemetry_resource_detector]
 azure_app_service = "opentelemetry.resource.detector.azure.app_service:AzureAppServiceResourceDetector"
