@@ -84,6 +84,10 @@ from opentelemetry.instrumentation.instrumentor import BaseInstrumentor
 from opentelemetry.instrumentation.utils import unwrap
 from opentelemetry.metrics import MeterProvider, get_meter_provider
 from opentelemetry.propagate import get_global_textmap
+from opentelemetry.propagators.aws.aws_xray_propagator import (
+    TRACE_HEADER_KEY,
+    AwsXRayPropagator,
+)
 from opentelemetry.semconv.resource import ResourceAttributes
 from opentelemetry.semconv.trace import SpanAttributes
 from opentelemetry.trace import (
@@ -93,6 +97,7 @@ from opentelemetry.trace import (
     get_tracer,
     get_tracer_provider,
 )
+from opentelemetry.trace.propagation import get_current_span
 from opentelemetry.trace.status import Status, StatusCode
 
 logger = logging.getLogger(__name__)
@@ -138,6 +143,7 @@ def _default_event_context_extractor(lambda_event: Any) -> Context:
 def _determine_parent_context(
     lambda_event: Any,
     event_context_extractor: Callable[[Any], Context],
+    disable_aws_context_propagation: bool = False,
 ) -> Context:
     """Determine the parent context for the current Lambda invocation.
 
@@ -154,11 +160,37 @@ def _determine_parent_context(
     Returns:
         A Context with configuration found in the carrier.
     """
+    ## CURRENT
+    # if event_context_extractor is None:
+    #     return _default_event_context_extractor(lambda_event)
 
-    if event_context_extractor is None:
-        return _default_event_context_extractor(lambda_event)
+    # return event_context_extractor(lambda_event)
 
-    return event_context_extractor(lambda_event)
+    ## OLD
+    parent_context = None
+
+    if not disable_aws_context_propagation:
+        xray_env_var = os.environ.get(_X_AMZN_TRACE_ID)
+
+        if xray_env_var:
+            parent_context = AwsXRayPropagator().extract(
+                {TRACE_HEADER_KEY: xray_env_var}
+            )
+
+    if (
+        parent_context
+        and get_current_span(parent_context)
+        .get_span_context()
+        .trace_flags.sampled
+    ):
+        return parent_context
+
+    if event_context_extractor:
+        parent_context = event_context_extractor(lambda_event)
+    else:
+        parent_context = _default_event_context_extractor(lambda_event)
+
+    return parent_context
 
 
 def _set_api_gateway_v1_proxy_attributes(
@@ -256,6 +288,7 @@ def _instrument(
     flush_timeout,
     event_context_extractor: Callable[[Any], Context],
     tracer_provider: TracerProvider = None,
+    disable_aws_context_propagation: bool = False,
     meter_provider: MeterProvider = None,
 ):
 
@@ -274,7 +307,13 @@ def _instrument(
         parent_context = _determine_parent_context(
             lambda_event,
             event_context_extractor,
+            False,
         )
+
+        logger.warning("got parent_context: %s", parent_context)
+        ## {} on main
+        ## or on old version
+        ## {'current-span-417d6a30-a3c2-4c03-9fa3-addf2d6fbe05': NonRecordingSpan(SpanContext(trace_id=0x5fb7331105e8bb83207fa31d4d9cdb4c, span_id=0x3328b8445a6dbad2, trace_flags=0x01, trace_state=[], is_remote=True))}
 
         try:
             event_source = lambda_event["Records"][0].get(
@@ -306,10 +345,20 @@ def _instrument(
 
         token = context_api.attach(parent_context)
         try:
+
+            # starting a span... gets/sets new trace_id?
             with tracer.start_as_current_span(
                 name=orig_handler_name,
+                # name="FOOOO!",
                 kind=span_kind,
             ) as span:
+
+                logger.warning("Started span (type %s) as: %s", type(span), span)
+                ## <class 'opentelemetry.sdk.trace._Span'>
+                ## _Span(name="mocks.lambda_function.handler", context=SpanContext(trace_id=0xebb8e321007b3ff6d058be8466a0c040, span_id=0x7b5c836b83ce7f79, trace_flags=0x01, trace_state=[], is_remote=False))
+                logger.warning("trace_id: %s", span.get_span_context().trace_id)
+                logger.warning("span.parent: %s", span.parent) # !!! None
+
                 if span.is_recording():
                     lambda_context = args[1]
                     # NOTE: The specs mention an exception here, allowing the
@@ -467,6 +516,7 @@ class AwsLambdaInstrumentor(BaseInstrumentor):
                 "event_context_extractor", _default_event_context_extractor
             ),
             tracer_provider=kwargs.get("tracer_provider"),
+            disable_aws_context_propagation=False,
             meter_provider=kwargs.get("meter_provider"),
         )
 
