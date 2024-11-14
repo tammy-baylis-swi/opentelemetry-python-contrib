@@ -436,7 +436,7 @@ def get_traced_connection_proxy(
                 wrapped_cursor, db_api_integration
             )
 
-        def is_mysql_connector_cursor_prepared(self, cursor):
+        def is_mysql_connector_cursor_prepared(self, cursor):  # pylint: disable=no-self-use
             try:
                 from mysql.connector.cursor_cext import (  # pylint: disable=import-outside-toplevel
                     CMySQLCursorPrepared,
