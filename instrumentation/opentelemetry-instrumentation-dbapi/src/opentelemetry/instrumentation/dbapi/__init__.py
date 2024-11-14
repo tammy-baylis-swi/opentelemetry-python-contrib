@@ -414,8 +414,9 @@ def get_traced_connection_proxy(
             # then MySQL statements will be prepared and executed natively.
             # 1:1 sqlcomment and span correlation in instrumentation will
             # break, so sqlcomment is not supported for this use case.
-            # This is here because a client app can use multiple cursors
-            # and to not check cursor with every traced request.
+            # This is here because wrapped cursor is not created until
+            # application side creates cursor and it's only then that
+            # the instrumentor knows what kind of cursor it is.
             is_prepared = False
             if (
                 db_api_integration.database_system == "mysql"
@@ -428,7 +429,8 @@ def get_traced_connection_proxy(
 
             if is_prepared and db_api_integration.enable_commenter:
                 _logger.warning(
-                    "sqlcomment is not supported for query statements executed with native prepared statement support. Disabling."
+                    "sqlcomment is not supported for query statements executed by cursors with native prepared statement support. Please check OpenTelemetry configuration. Disabling sqlcommenting for instrumentation of %s.",
+                    db_api_integration.connect_module.__name__,
                 )
                 db_api_integration.enable_commenter = False
 
@@ -451,14 +453,11 @@ def get_traced_connection_proxy(
                     CMySQLCursorPreparedNamedTuple,
                     CMySQLCursorPreparedRaw,
                 ]:
-                    _logger.warning(
-                        "Adding sqlcomment to prepared MySQL statements is not supported. Please check OpenTelemetry configuration. Skipping."
-                    )
                     return True
 
             except ImportError as exc:
                 _logger.warning(
-                    "Could not verify mysql.connector cursor, skipping prepared statement check: %s",
+                    "Could not verify mysql.connector cursor, skipping prepared cursor check: %s",
                     exc,
                 )
 
