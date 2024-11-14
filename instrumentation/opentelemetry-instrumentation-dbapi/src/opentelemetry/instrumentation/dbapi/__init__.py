@@ -408,9 +408,61 @@ def get_traced_connection_proxy(
             )
 
         def cursor(self, *args, **kwargs):
-            return get_traced_cursor_proxy(
-                self.__wrapped__.cursor(*args, **kwargs), db_api_integration
+            wrapped_cursor = self.__wrapped__.cursor(*args, **kwargs)
+
+            # If a mysql-connector cursor was created with prepared=True
+            # then MySQL statements will be prepared and executed natively.
+            # 1:1 sqlcomment and span correlation in instrumentation will
+            # break, so sqlcomment is not supported for this use case.
+            # This is here because a client app can use multiple cursors
+            # and to not check cursor with every traced request.
+            is_prepared = False
+            if (
+                db_api_integration.database_system == "mysql"
+                and db_api_integration.connect_module.__name__
+                == "mysql.connector"
+            ):
+                is_prepared = self.is_mysql_connector_cursor_prepared(
+                    wrapped_cursor
+                )
+
+            if is_prepared and db_api_integration.enable_commenter:
+                _logger.warning(
+                    "sqlcomment is not supported for query statements executed with native prepared statement support. Disabling."
+                )
+                db_api_integration.enable_commenter = False
+
+            return get_traced_connection_proxy(
+                wrapped_cursor, db_api_integration
             )
+
+        def is_mysql_connector_cursor_prepared(self, cursor):
+            try:
+                from mysql.connector.cursor_cext import (  # pylint: disable=import-outside-toplevel
+                    CMySQLCursorPrepared,
+                    CMySQLCursorPreparedDict,
+                    CMySQLCursorPreparedNamedTuple,
+                    CMySQLCursorPreparedRaw,
+                )
+
+                if type(cursor) in [
+                    CMySQLCursorPrepared,
+                    CMySQLCursorPreparedDict,
+                    CMySQLCursorPreparedNamedTuple,
+                    CMySQLCursorPreparedRaw,
+                ]:
+                    _logger.warning(
+                        "Adding sqlcomment to prepared MySQL statements is not supported. Please check OpenTelemetry configuration. Skipping."
+                    )
+                    return True
+
+            except ImportError as exc:
+                _logger.warning(
+                    "Could not verify mysql.connector cursor, skipping prepared statement check: %s",
+                    exc,
+                )
+
+            return False
 
         def __enter__(self):
             self.__wrapped__.__enter__()
@@ -460,34 +512,6 @@ class CursorTracer:
         if self._db_api_integration.capture_parameters and len(args) > 1:
             span.set_attribute("db.statement.parameters", str(args[1]))
 
-    def _is_mysql_connector_cursor_prepared(self, cursor):  # pylint: disable=no-self-use
-        try:
-            from mysql.connector.cursor_cext import (  # pylint: disable=import-outside-toplevel
-                CMySQLCursorPrepared,
-                CMySQLCursorPreparedDict,
-                CMySQLCursorPreparedNamedTuple,
-                CMySQLCursorPreparedRaw,
-            )
-
-            if type(cursor) in [
-                CMySQLCursorPrepared,
-                CMySQLCursorPreparedDict,
-                CMySQLCursorPreparedNamedTuple,
-                CMySQLCursorPreparedRaw,
-            ]:
-                _logger.warning(
-                    "Adding sqlcomment to prepared MySQL statements is not supported. Please check OpenTelemetry configuration. Skipping."
-                )
-                return True
-
-        except ImportError as exc:
-            _logger.warning(
-                "Could not verify mysql.connector cursor, skipping sqlcomment: %s",
-                exc,
-            )
-
-        return False
-
     def get_operation_name(self, cursor, args):  # pylint: disable=no-self-use
         if args and isinstance(args[0], str):
             # Strip leading comments so we get the operation name.
@@ -522,67 +546,50 @@ class CursorTracer:
         ) as span:
             if span.is_recording():
                 if args and self._commenter_enabled:
-                    # If a mysql-connector cursor was created with prepared=True
-                    # then MySQL statements will be prepared and executed natively.
-                    # 1:1 sqlcomment and span correlation in instrumentation will
-                    # break, so sqlcomment is not supported for this use case.
-                    # This is here because a client app can use multiple cursors.
-                    is_prepared = False
-                    if (
-                        self._db_api_integration.database_system == "mysql"
-                        and self._db_api_integration.connect_module.__name__
-                        == "mysql.connector"
-                    ):
-                        is_prepared = self._is_mysql_connector_cursor_prepared(
-                            cursor
+                    try:
+                        args_list = list(args)
+
+                        # lazy capture of mysql-connector client version using cursor
+                        if (
+                            self._db_api_integration.database_system == "mysql"
+                            and self._db_api_integration.connect_module.__name__
+                            == "mysql.connector"
+                            and not self._db_api_integration.commenter_data[
+                                "mysql_client_version"
+                            ]
+                        ):
+                            self._db_api_integration.commenter_data[
+                                "mysql_client_version"
+                            ] = cursor._cnx._cmysql.get_client_info()
+
+                        commenter_data = dict(
+                            self._db_api_integration.commenter_data
+                        )
+                        if self._commenter_options.get(
+                            "opentelemetry_values", True
+                        ):
+                            commenter_data.update(
+                                **_get_opentelemetry_values()
+                            )
+
+                        # Filter down to just the requested attributes.
+                        commenter_data = {
+                            k: v
+                            for k, v in commenter_data.items()
+                            if self._commenter_options.get(k, True)
+                        }
+                        statement = _add_sql_comment(
+                            args_list[0], **commenter_data
                         )
 
-                    if not is_prepared:
-                        try:
-                            args_list = list(args)
+                        args_list[0] = statement
+                        args = tuple(args_list)
 
-                            # lazy capture of mysql-connector client version using cursor
-                            if (
-                                self._db_api_integration.database_system
-                                == "mysql"
-                                and self._db_api_integration.connect_module.__name__
-                                == "mysql.connector"
-                                and not self._db_api_integration.commenter_data[
-                                    "mysql_client_version"
-                                ]
-                            ):
-                                self._db_api_integration.commenter_data[
-                                    "mysql_client_version"
-                                ] = cursor._cnx._cmysql.get_client_info()
-
-                            commenter_data = dict(
-                                self._db_api_integration.commenter_data
-                            )
-                            if self._commenter_options.get(
-                                "opentelemetry_values", True
-                            ):
-                                commenter_data.update(
-                                    **_get_opentelemetry_values()
-                                )
-
-                            # Filter down to just the requested attributes.
-                            commenter_data = {
-                                k: v
-                                for k, v in commenter_data.items()
-                                if self._commenter_options.get(k, True)
-                            }
-                            statement = _add_sql_comment(
-                                args_list[0], **commenter_data
-                            )
-
-                            args_list[0] = statement
-                            args = tuple(args_list)
-
-                        except Exception as exc:  # pylint: disable=broad-except
-                            _logger.exception(
-                                "Exception while generating sql comment: %s",
-                                exc,
-                            )
+                    except Exception as exc:  # pylint: disable=broad-except
+                        _logger.exception(
+                            "Exception while generating sql comment: %s",
+                            exc,
+                        )
 
                 self._populate_span(span, cursor, *args)
 
