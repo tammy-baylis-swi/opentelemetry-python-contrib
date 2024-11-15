@@ -410,32 +410,38 @@ def get_traced_connection_proxy(
         def cursor(self, *args, **kwargs):
             wrapped_cursor = self.__wrapped__.cursor(*args, **kwargs)
 
-            # If a mysql-connector cursor was created with prepared=True
+            # It's common to have multiple db client cursors per app,
+            # so enable_commenter is set at the cursor level and used
+            # during traced query execution.
+            enable_commenter_cursor = db_api_integration.enable_commenter
+
+            # If a mysql-connector cursor was created with prepared=True,
             # then MySQL statements will be prepared and executed natively.
-            # 1:1 sqlcomment and span correlation in instrumentation will
+            # 1:1 sqlcomment and span correlation in instrumentation would
             # break, so sqlcomment is not supported for this use case.
-            # This is here because wrapped cursor is not created until
-            # application side creates cursor and it's only then that
-            # the instrumentor knows what kind of cursor it is.
-            is_prepared = False
-            if (
-                db_api_integration.database_system == "mysql"
-                and db_api_integration.connect_module.__name__
-                == "mysql.connector"
-            ):
-                is_prepared = self.is_mysql_connector_cursor_prepared(
-                    wrapped_cursor
-                )
-
-            if is_prepared and db_api_integration.enable_commenter:
-                _logger.warning(
-                    "sqlcomment is not supported for query statements executed by cursors with native prepared statement support. Please check OpenTelemetry configuration. Disabling sqlcommenting for instrumentation of %s.",
-                    db_api_integration.connect_module.__name__,
-                )
-                db_api_integration.enable_commenter = False
-
+            # This is here because wrapped cursor is created when application 
+            # side creates cursor. After that, the instrumentor knows what
+            # kind of cursor was initialized.
+            if enable_commenter_cursor:
+                is_prepared = False
+                if (
+                    db_api_integration.database_system == "mysql"
+                    and db_api_integration.connect_module.__name__
+                    == "mysql.connector"
+                ):
+                    is_prepared = self.is_mysql_connector_cursor_prepared(
+                        wrapped_cursor
+                    )
+                if is_prepared:
+                    _logger.warning(
+                        "sqlcomment is not supported for query statements executed by cursors with native prepared statement support. Please check OpenTelemetry configuration. Disabling sqlcommenting for instrumentation of %s.",
+                        db_api_integration.connect_module.__name__,
+                    )
+                    enable_commenter_cursor = False
             return get_traced_cursor_proxy(
-                wrapped_cursor, db_api_integration
+                wrapped_cursor,
+                db_api_integration,
+                enable_commenter=enable_commenter_cursor,
             )
 
         def is_mysql_connector_cursor_prepared(self, cursor):  # pylint: disable=no-self-use
@@ -474,9 +480,13 @@ def get_traced_connection_proxy(
 
 
 class CursorTracer:
-    def __init__(self, db_api_integration: DatabaseApiIntegration) -> None:
+    def __init__(
+        self,
+        db_api_integration: DatabaseApiIntegration,
+        enable_commenter: bool = False,
+    ) -> None:
         self._db_api_integration = db_api_integration
-        self._commenter_enabled = self._db_api_integration.enable_commenter
+        self._commenter_enabled = enable_commenter
         self._commenter_options = (
             self._db_api_integration.commenter_options
             if self._db_api_integration.commenter_options
@@ -596,7 +606,8 @@ class CursorTracer:
 
 
 def get_traced_cursor_proxy(cursor, db_api_integration, *args, **kwargs):
-    _cursor_tracer = CursorTracer(db_api_integration)
+    enable_commenter = kwargs.get("enable_commenter", False)
+    _cursor_tracer = CursorTracer(db_api_integration, enable_commenter)
 
     # pylint: disable=abstract-method
     class TracedCursorProxy(wrapt.ObjectProxy):
