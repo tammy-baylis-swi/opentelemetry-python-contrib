@@ -434,7 +434,7 @@ def get_traced_connection_proxy(
                 )
                 db_api_integration.enable_commenter = False
 
-            return get_traced_connection_proxy(
+            return get_traced_cursor_proxy(
                 wrapped_cursor, db_api_integration
             )
 
