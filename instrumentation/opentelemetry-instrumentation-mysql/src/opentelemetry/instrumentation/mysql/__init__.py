@@ -356,7 +356,7 @@ def get_traced_cursor_proxy(cursor, db_api_integration, *args, **kwargs):
 
 def _new_cursor_factory(
     db_api: DatabaseApiIntegration = None,
-    base_factory: CMySQLCursor = None,
+    cursor_factory: CMySQLCursor = None,
     tracer_provider: trace_api.TracerProvider = None,
     enable_commenter: bool = False,
 ):
@@ -370,13 +370,13 @@ def _new_cursor_factory(
         )
 
     # Latter is base class for all mysql-connector cursors
-    base_factory = base_factory or CMySQLCursor
+    cursor_factory = cursor_factory or CMySQLCursor
     _cursor_tracer = CursorTracer(
         db_api,
         enable_commenter,
     )
 
-    class TracedCursorFactory(base_factory):
+    class TracedCursorFactory(cursor_factory):
         def execute(self, *args, **kwargs):
             return _cursor_tracer.traced_execution(
                 self, super().execute, *args, **kwargs
