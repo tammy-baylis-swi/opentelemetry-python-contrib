@@ -108,11 +108,13 @@ API
 """
 
 import logging
+from importlib import import_module
 from typing import (
     Any,
     Callable,
     Collection,
     Dict,
+    Optional,
     Tuple,
 )
 
@@ -172,36 +174,52 @@ class MySQLInstrumentor(BaseInstrumentor):
     def instrument_connection(
         self,
         connection,
-        tracer_provider=None,
-        enable_commenter=None,
-        commenter_options=None,
+        tracer_provider: Optional[trace_api.TracerProvider] = None,
+        enable_commenter: bool = False,
+        commenter_options: dict = None,
     ):
-        if not hasattr(connection, "_is_instrumented_by_opentelemetry"):
-            connection._is_instrumented_by_opentelemetry = False
+        """Enable instrumentation in a MySQL connection.
 
-        if not connection._is_instrumented_by_opentelemetry:
-            setattr(
-                connection, _OTEL_CURSOR_FACTORY_KEY, connection.cursor_factory
-            )
-            connection.cursor_factory = _new_cursor_factory(
-                tracer_provider=tracer_provider
-            )
-            connection._is_instrumented_by_opentelemetry = True
-        else:
-            _logger.warning(
-                "Attempting to instrument mysql-connector connection while already instrumented"
-            )
-        return connection
+        Args:
+            connection: The connection to instrument.
+            tracer_provider: The optional tracer provider to use. If omitted
+                the current globally configured one is used.
+            enable_commenter: Flag to enable/disable sqlcommenter.
+            commenter_options: Configurations for tags to be appended at the sql query.
+
+        Returns:
+            An instrumented connection.
+        """
+        if isinstance(connection, wrapt.ObjectProxy):
+            _logger.warning("Connection already instrumented")
+            return connection
+
+        db_integration = DatabaseApiIntegration(
+            __name__,
+            self._DATABASE_SYSTEM,
+            self._CONNECTION_ATTRIBUTES,
+            version=__version__,
+            tracer_provider=tracer_provider,
+            enable_commenter=enable_commenter,
+            commenter_options=commenter_options,
+            connect_module=import_module("mysql.connector"),
+        )
+        db_integration.get_connection_attributes(connection)
+        return get_traced_connection_proxy(connection, db_integration)
 
     def uninstrument_connection(
         self,
         connection,
     ):
-        connection.cursor_factory = getattr(
-            connection, _OTEL_CURSOR_FACTORY_KEY, None
-        )
+        """Disable instrumentation in a MySQL connection.
 
-        return connection
+        Args:
+            connection: The connection to uninstrument.
+
+        Returns:
+            An uninstrumented connection.
+        """
+        return dbapi.uninstrument_connection(connection)
 
 
 class DatabaseApiIntegration(dbapi.DatabaseApiIntegration):
