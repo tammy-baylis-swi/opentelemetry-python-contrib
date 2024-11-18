@@ -231,19 +231,7 @@ def get_traced_connection_proxy(
     connection, db_api_integration, *args, **kwargs
 ):
     # pylint: disable=abstract-method
-    class TracedConnectionProxy(wrapt.ObjectProxy):
-        # pylint: disable=unused-argument
-        def __init__(self, connection, *args, **kwargs):
-            wrapt.ObjectProxy.__init__(self, connection)
-
-        def __getattribute__(self, name):
-            if object.__getattribute__(self, name):
-                return object.__getattribute__(self, name)
-
-            return object.__getattribute__(
-                object.__getattribute__(self, "_connection"), name
-            )
-
+    class TracedConnectionProxy(dbapi.BaseTracedConnectionProxy):
         def cursor(self, *args, **kwargs):
             wrapped_cursor = self.__wrapped__.cursor(*args, **kwargs)
 
@@ -306,13 +294,6 @@ def get_traced_connection_proxy(
 
             return False
 
-        def __enter__(self):
-            self.__wrapped__.__enter__()
-            return self
-
-        def __exit__(self, *args, **kwargs):
-            self.__wrapped__.__exit__(*args, **kwargs)
-
     return TracedConnectionProxy(connection, *args, **kwargs)
 
 
@@ -325,40 +306,19 @@ class CursorTracer(dbapi.CursorTracer):
         super().__init__(db_api_integration)
         # It's common to have multiple db client cursors per app,
         # so enable_commenter is set at the cursor level and used
-        # during traced query execution for mysql-connector
+        # during CursorTracer.traced_execution for mysql-connector
         self._commenter_enabled = enable_commenter
 
 
 def get_traced_cursor_proxy(cursor, db_api_integration, *args, **kwargs):
-    enable_commenter = kwargs.get("enable_commenter", False)
-    _cursor_tracer = CursorTracer(db_api_integration, enable_commenter)
-
-    # pylint: disable=abstract-method
-    class TracedCursorProxy(wrapt.ObjectProxy):
-        # pylint: disable=unused-argument
-        def __init__(self, cursor, *args, **kwargs):
-            wrapt.ObjectProxy.__init__(self, cursor)
-
-        def execute(self, *args, **kwargs):
-            return _cursor_tracer.traced_execution(
-                self.__wrapped__, self.__wrapped__.execute, *args, **kwargs
+    class TracedCursorProxy(dbapi.BaseTracedCursorProxy):
+        def _set_cursor_tracer(self, **kwargs):
+            self._cursor_tracer = CursorTracer(
+                kwargs.get("db_api_integration"),
+                kwargs.get("enable_commenter", False),
             )
 
-        def executemany(self, *args, **kwargs):
-            return _cursor_tracer.traced_execution(
-                self.__wrapped__, self.__wrapped__.executemany, *args, **kwargs
-            )
-
-        def callproc(self, *args, **kwargs):
-            return _cursor_tracer.traced_execution(
-                self.__wrapped__, self.__wrapped__.callproc, *args, **kwargs
-            )
-
-        def __enter__(self):
-            self.__wrapped__.__enter__()
-            return self
-
-        def __exit__(self, *args, **kwargs):
-            self.__wrapped__.__exit__(*args, **kwargs)
-
-    return TracedCursorProxy(cursor, *args, **kwargs)
+    kwargs["db_api_integration"] = db_api_integration
+    cursor_proxy = TracedCursorProxy(cursor, *args, **kwargs)
+    cursor_proxy._set_cursor_tracer(**kwargs)
+    return cursor_proxy
