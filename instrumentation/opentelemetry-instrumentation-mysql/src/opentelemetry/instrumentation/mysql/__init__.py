@@ -113,7 +113,6 @@ from importlib import import_module
 
 import mysql.connector
 import wrapt
-from mysql.connector.cursor_cext import CMySQLCursor
 
 from opentelemetry import trace as trace_api
 from opentelemetry.instrumentation import dbapi
@@ -222,7 +221,7 @@ class DatabaseApiIntegration(dbapi.DatabaseApiIntegration):
         args: typing.Tuple[typing.Any, typing.Any],
         kwargs: typing.Dict[typing.Any, typing.Any],
     ):
-        """Add object proxy to connection object."""
+        """Add object proxy to connection object that checks cursor type."""
         connection = connect_method(*args, **kwargs)
         self.get_connection_attributes(connection)
         return get_traced_connection_proxy(connection, self)
@@ -363,44 +362,3 @@ def get_traced_cursor_proxy(cursor, db_api_integration, *args, **kwargs):
             self.__wrapped__.__exit__(*args, **kwargs)
 
     return TracedCursorProxy(cursor, *args, **kwargs)
-
-
-def _new_cursor_factory(
-    db_api: DatabaseApiIntegration = None,
-    cursor_factory: CMySQLCursor = None,
-    tracer_provider: trace_api.TracerProvider = None,
-    enable_commenter: bool = False,
-):
-    if not db_api:
-        db_api = DatabaseApiIntegration(
-            __name__,
-            MySQLInstrumentor._DATABASE_SYSTEM,
-            MySQLInstrumentor._CONNECTION_ATTRIBUTES,
-            version=__version__,
-            tracer_provider=tracer_provider,
-        )
-
-    # Latter is base class for all mysql-connector cursors
-    cursor_factory = cursor_factory or CMySQLCursor
-    _cursor_tracer = CursorTracer(
-        db_api,
-        enable_commenter,
-    )
-
-    class TracedCursorFactory(cursor_factory):
-        def execute(self, *args, **kwargs):
-            return _cursor_tracer.traced_execution(
-                self, super().execute, *args, **kwargs
-            )
-
-        def executemany(self, *args, **kwargs):
-            return _cursor_tracer.traced_execution(
-                self, super().executemany, *args, **kwargs
-            )
-
-        def callproc(self, *args, **kwargs):
-            return _cursor_tracer.traced_execution(
-                self, super().callproc, *args, **kwargs
-            )
-
-    return TracedCursorFactory
