@@ -236,8 +236,8 @@ def get_traced_connection_proxy(
             wrapped_cursor = self.__wrapped__.cursor(*args, **kwargs)
 
             # It's common to have multiple db client cursors per app,
-            # so enable_commenter is set at the cursor level and used
-            # during traced query execution.
+            # so enable_commenter is calculated for the cursor level for
+            # traced query execution.
             enable_commenter_cursor = db_api_integration.enable_commenter
 
             # If a mysql-connector cursor was created with prepared=True,
@@ -266,7 +266,7 @@ def get_traced_connection_proxy(
             return get_traced_cursor_proxy(
                 wrapped_cursor,
                 db_api_integration,
-                enable_commenter=enable_commenter_cursor,
+                enable_commenter_cursor,
             )
 
         def is_mysql_connector_cursor_prepared(self, cursor):  # pylint: disable=no-self-use
@@ -310,15 +310,15 @@ class CursorTracer(dbapi.CursorTracer):
         self._commenter_enabled = enable_commenter
 
 
-def get_traced_cursor_proxy(cursor, db_api_integration, *args, **kwargs):
+def get_traced_cursor_proxy(
+    cursor, db_api_integration, enable_commenter_cursor, *args, **kwargs
+):
     class TracedCursorProxy(dbapi.BaseTracedCursorProxy):
-        def _set_cursor_tracer(self, **kwargs):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
             self._cursor_tracer = CursorTracer(
-                kwargs.get("db_api_integration"),
-                kwargs.get("enable_commenter", False),
+                db_api_integration,
+                enable_commenter_cursor,
             )
 
-    kwargs["db_api_integration"] = db_api_integration
-    cursor_proxy = TracedCursorProxy(cursor, *args, **kwargs)
-    cursor_proxy._set_cursor_tracer(**kwargs)
-    return cursor_proxy
+    return TracedCursorProxy(cursor, *args, **kwargs)

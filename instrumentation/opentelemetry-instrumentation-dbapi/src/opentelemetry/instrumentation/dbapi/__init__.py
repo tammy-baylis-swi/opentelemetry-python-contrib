@@ -552,15 +552,12 @@ class CursorTracer:
 
 # pylint: disable=abstract-method
 class BaseTracedCursorProxy(ABC, wrapt.ObjectProxy):
-    @abstractmethod
-    # def _set_cursor_tracer(self, db_api_integration, **kwargs):
-    def _set_cursor_tracer(self, **kwargs):
-        """Set self._cursor_tracer with db_api_integration kwarg"""
-
     # pylint: disable=unused-argument
+    @abstractmethod
     def __init__(self, cursor, *args, **kwargs):
+        """Wrap db client cursor for tracing"""
         wrapt.ObjectProxy.__init__(self, cursor)
-        self._cursor_tracer = self._set_cursor_tracer(**kwargs)
+        self._cursor_tracer = None
 
     def callproc(self, *args, **kwargs):
         return self._cursor_tracer.traced_execution(
@@ -587,12 +584,10 @@ class BaseTracedCursorProxy(ABC, wrapt.ObjectProxy):
 
 def get_traced_cursor_proxy(cursor, db_api_integration, *args, **kwargs):
     class TracedCursorProxy(BaseTracedCursorProxy):
-        def _set_cursor_tracer(self, **kwargs):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
             self._cursor_tracer = CursorTracer(
-                kwargs.get("db_api_integration"),
+                db_api_integration,
             )
 
-    kwargs["db_api_integration"] = db_api_integration
-    cursor_proxy = TracedCursorProxy(cursor, *args, **kwargs)
-    cursor_proxy._set_cursor_tracer(**kwargs)
-    return cursor_proxy
+    return TracedCursorProxy(cursor, *args, **kwargs)
