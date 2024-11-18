@@ -108,15 +108,8 @@ API
 """
 
 import logging
+import typing
 from importlib import import_module
-from typing import (
-    Any,
-    Callable,
-    Collection,
-    Dict,
-    Optional,
-    Tuple,
-)
 
 import mysql.connector
 import wrapt
@@ -142,7 +135,7 @@ class MySQLInstrumentor(BaseInstrumentor):
 
     _DATABASE_SYSTEM = "mysql"
 
-    def instrumentation_dependencies(self) -> Collection[str]:
+    def instrumentation_dependencies(self) -> typing.Collection[str]:
         return _instruments
 
     def _instrument(self, **kwargs):
@@ -174,7 +167,7 @@ class MySQLInstrumentor(BaseInstrumentor):
     def instrument_connection(
         self,
         connection,
-        tracer_provider: Optional[trace_api.TracerProvider] = None,
+        tracer_provider: typing.Optional[trace_api.TracerProvider] = None,
         enable_commenter: bool = False,
         commenter_options: dict = None,
     ):
@@ -225,9 +218,9 @@ class MySQLInstrumentor(BaseInstrumentor):
 class DatabaseApiIntegration(dbapi.DatabaseApiIntegration):
     def wrapped_connection(
         self,
-        connect_method: Callable[..., Any],
-        args: Tuple[Any, Any],
-        kwargs: Dict[Any, Any],
+        connect_method: typing.Callable[..., typing.Any],
+        args: typing.Tuple[typing.Any, typing.Any],
+        kwargs: typing.Dict[typing.Any, typing.Any],
     ):
         """Add object proxy to connection object."""
         connection = connect_method(*args, **kwargs)
