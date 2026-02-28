@@ -43,6 +43,43 @@ Usage
     if __name__ == "__main__":
         app.run(debug=True)
 
+Custom Metrics Attributes using Labeler
+***************************************
+The Flask instrumentation reads from a labeler utility that supports adding custom
+attributes to HTTP duration metrics at record time. The custom attributes are
+stored only within the context of an instrumented request or operation. The
+instrumentor does not overwrite base attributes that exist at the same keys as
+any custom attributes.
+
+
+.. code-block:: python
+
+    from flask import Flask
+
+    from opentelemetry.instrumentation._labeler import get_labeler
+    from opentelemetry.instrumentation.flask import FlaskInstrumentor
+
+    app = Flask(__name__)
+    FlaskInstrumentor().instrument_app(app)
+
+    @app.route("/users/<user_id>/")
+    def user_profile(user_id):
+        # Get the labeler for the current request
+        labeler = get_labeler()
+
+        # Add custom attributes to Flask instrumentation metrics
+        labeler.add("user_id", user_id)
+        labeler.add("user_type", "registered")
+
+        # Or, add multiple attributes at once
+        labeler.add_attributes({
+            "feature_flag": "new_ui",
+            "experiment_group": "control"
+        })
+
+        return f"User profile for {user_id}"
+
+
 Configuration
 -------------
 
@@ -266,6 +303,13 @@ from packaging import version as package_version
 
 import opentelemetry.instrumentation.wsgi as otel_wsgi
 from opentelemetry import context, trace
+from opentelemetry.instrumentation._labeler import (
+    clear_labeler,
+    detach_labeler_boundary,
+    enrich_metric_attributes,
+    enter_labeler_request_boundary,
+    is_labeler_request_boundary_active,
+)
 from opentelemetry.instrumentation._semconv import (
     HTTP_DURATION_HISTOGRAM_BUCKETS_NEW,
     _get_schema_url,
@@ -350,6 +394,10 @@ def _rewrapped_app(
 ):
     # pylint: disable=too-many-statements
     def _wrapped_app(wrapped_app_environ, start_response):
+        labeler_boundary_token = None
+        if not is_labeler_request_boundary_active():
+            labeler_boundary_token = enter_labeler_request_boundary()
+
         # We want to measure the time for route matching, etc.
         # In theory, we could start the span here and use
         # update_name later but that API is "highly discouraged" so
@@ -414,48 +462,64 @@ def _rewrapped_app(
                     response_hook(span, status, response_headers)
             return start_response(status, response_headers, *args, **kwargs)
 
-        result = wsgi_app(wrapped_app_environ, _start_response)
+        try:
+            result = wsgi_app(wrapped_app_environ, _start_response)
 
-        # Note: Streaming response context cleanup is now handled in the Flask teardown function
-        # (_wrapped_teardown_request) to ensure proper cleanup following Logfire's recommendations
-        # for OpenTelemetry generator context management
+            # Note: Streaming response context cleanup is now handled in the Flask teardown function
+            # (_wrapped_teardown_request) to ensure proper cleanup following Logfire's recommendations
+            # for OpenTelemetry generator context management
 
-        if should_trace:
-            duration_s = default_timer() - start
-            # Get the span from wrapped_app_environ and re-create context manually
-            # to pass to histogram for exemplars generation
-            span = wrapped_app_environ.get(_ENVIRON_SPAN_KEY)
-            metrics_context = trace.set_span_in_context(span)
+            if should_trace:
+                duration_s = default_timer() - start
+                # Get the span from wrapped_app_environ and re-create context manually
+                # to pass to histogram for exemplars generation
+                span = wrapped_app_environ.get(_ENVIRON_SPAN_KEY)
+                metrics_context = trace.set_span_in_context(span)
 
-            if duration_histogram_old:
-                duration_attrs_old = otel_wsgi._parse_duration_attrs(
-                    attributes, _StabilityMode.DEFAULT
-                )
+                if duration_histogram_old:
+                    duration_attrs_old = otel_wsgi._parse_duration_attrs(
+                        attributes, _StabilityMode.DEFAULT
+                    )
 
-                if request_route:
-                    # http.target to be included in old semantic conventions
-                    duration_attrs_old[HTTP_TARGET] = str(request_route)
-                duration_histogram_old.record(
-                    max(round(duration_s * 1000), 0),
-                    duration_attrs_old,
-                    context=metrics_context,
-                )
-            if duration_histogram_new:
-                duration_attrs_new = otel_wsgi._parse_duration_attrs(
-                    attributes, _StabilityMode.HTTP
-                )
+                    if request_route:
+                        # http.target to be included in old semantic conventions
+                        duration_attrs_old[HTTP_TARGET] = str(request_route)
 
-                if request_route:
-                    duration_attrs_new[HTTP_ROUTE] = str(request_route)
+                    # Enhance attributes with any custom labeler attributes
+                    duration_attrs_old = enrich_metric_attributes(
+                        duration_attrs_old
+                    )
 
-                duration_histogram_new.record(
-                    max(duration_s, 0),
-                    duration_attrs_new,
-                    context=metrics_context,
-                )
+                    duration_histogram_old.record(
+                        max(round(duration_s * 1000), 0),
+                        duration_attrs_old,
+                        context=metrics_context,
+                    )
+                if duration_histogram_new:
+                    duration_attrs_new = otel_wsgi._parse_duration_attrs(
+                        attributes, _StabilityMode.HTTP
+                    )
 
-        active_requests_counter.add(-1, active_requests_count_attrs)
-        return result
+                    if request_route:
+                        duration_attrs_new[HTTP_ROUTE] = str(request_route)
+
+                    # Enhance attributes with any custom labeler attributes
+                    duration_attrs_new = enrich_metric_attributes(
+                        duration_attrs_new
+                    )
+
+                    duration_histogram_new.record(
+                        max(duration_s, 0),
+                        duration_attrs_new,
+                        context=metrics_context,
+                    )
+
+            return result
+        finally:
+            active_requests_counter.add(-1, active_requests_count_attrs)
+            if labeler_boundary_token is not None:
+                detach_labeler_boundary(labeler_boundary_token)
+                clear_labeler()
 
     def _should_trace(excluded_urls) -> bool:
         return bool(

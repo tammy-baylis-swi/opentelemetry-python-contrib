@@ -79,6 +79,55 @@ Usage (Web.py)
         )
         server.start()
 
+Custom Metrics Attributes using Labeler
+***************************************
+The WSGI instrumentation reads from a labeler utility that supports adding custom
+attributes to HTTP duration metrics at record time. The custom attributes are
+stored only within the context of an instrumented request or operation. The
+instrumentor does not overwrite base attributes that exist at the same keys as
+any custom attributes.
+
+.. code-block:: python
+
+    import web
+    from cheroot import wsgi
+
+    from opentelemetry.instrumentation._labeler import get_labeler
+    from opentelemetry.instrumentation.wsgi import OpenTelemetryMiddleware
+
+    urls = (
+        '/', 'index',
+        '/users/(.+)/', 'user_profile'
+    )
+
+    class user_profile:
+        def GET(self, user_id):
+            # Get the labeler for the current request
+            labeler = get_labeler()
+
+            # Add custom attributes to WSGI instrumentation metrics
+            labeler.add("user_id", user_id)
+            labeler.add("user_type", "registered")
+
+            # Or, add multiple attributes at once
+            labeler.add_attributes({
+                "feature_flag": "new_ui",
+                "experiment_group": "control"
+            })
+            return f"User profile for {user_id}"
+
+    if __name__ == "__main__":
+        app = web.application(urls, globals())
+        func = app.wsgifunc()
+
+        func = OpenTelemetryMiddleware(func)
+
+        server = wsgi.WSGIServer(
+            ("localhost", 5100), func, server_name="localhost"
+        )
+        server.start()
+
+
 Configuration
 -------------
 
@@ -223,6 +272,11 @@ from timeit import default_timer
 from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, TypeVar, cast
 
 from opentelemetry import context, trace
+from opentelemetry.instrumentation._labeler import (
+    detach_labeler_boundary,
+    enrich_metric_attributes,
+    enter_labeler_request_boundary,
+)
 from opentelemetry.instrumentation._semconv import (
     HTTP_DURATION_HISTOGRAM_BUCKETS_NEW,
     _filter_semconv_active_request_count_attr,
@@ -677,6 +731,8 @@ class OpenTelemetryMiddleware:
             environ: A WSGI environment.
             start_response: The WSGI start_response callable.
         """
+        labeler_boundary_token = enter_labeler_request_boundary()
+
         req_attrs = collect_request_attributes(
             environ, self._sem_conv_opt_in_mode
         )
@@ -737,6 +793,10 @@ class OpenTelemetryMiddleware:
                 duration_attrs_old = _parse_duration_attrs(
                     req_attrs, _StabilityMode.DEFAULT
                 )
+                # Enhance attributes with any custom labeler attributes
+                duration_attrs_old = enrich_metric_attributes(
+                    duration_attrs_old
+                )
                 self.duration_histogram_old.record(
                     max(round(duration_s * 1000), 0),
                     duration_attrs_old,
@@ -746,12 +806,17 @@ class OpenTelemetryMiddleware:
                 duration_attrs_new = _parse_duration_attrs(
                     req_attrs, _StabilityMode.HTTP
                 )
+                # Enhance attributes with any custom labeler attributes
+                duration_attrs_new = enrich_metric_attributes(
+                    duration_attrs_new
+                )
                 self.duration_histogram_new.record(
                     max(duration_s, 0),
                     duration_attrs_new,
                     context=active_metric_ctx,
                 )
             self.active_requests_counter.add(-1, active_requests_count_attrs)
+            detach_labeler_boundary(labeler_boundary_token)
 
 
 # Put this in a subfunction to not delay the call to the wrapped
